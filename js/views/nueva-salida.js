@@ -4,6 +4,9 @@ import { ir } from '../router.js';
 
 let paradas = [];
 let contadorParada = 0;
+let mapaModal = null;
+let markerModal = null;
+let coordsModal = { lat: null, lng: null };
 
 export function renderNuevaSalida(contenedor) {
   paradas = [];
@@ -35,7 +38,9 @@ export function renderNuevaSalida(contenedor) {
               style="background:#f9731620;color:#f97316;border:1px solid #f9731640"
               onmouseover="this.style.background='#f9731630'"
               onmouseout="this.style.background='#f9731620'">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
               Agregar parada
             </button>
           </div>
@@ -44,7 +49,8 @@ export function renderNuevaSalida(contenedor) {
           </div>
         </div>
 
-        <div id="msg-error" class="hidden mb-4 px-4 py-3 rounded-xl text-sm" style="background:#3b1212;color:#f87171;border:1px solid #7f1d1d"></div>
+        <div id="msg-error" class="hidden mb-4 px-4 py-3 rounded-xl text-sm"
+          style="background:#3b1212;color:#f87171;border:1px solid #7f1d1d"></div>
 
         <button id="btn-guardar"
           class="w-full py-4 rounded-xl font-bold text-white text-sm transition-all flex items-center justify-center gap-2"
@@ -64,104 +70,113 @@ export function renderNuevaSalida(contenedor) {
   document.getElementById('btn-guardar').addEventListener('click', guardarSalida);
 }
 
+function cerrarMapaModal() {
+  if (mapaModal) { mapaModal.remove(); mapaModal = null; }
+  markerModal = null;
+  coordsModal = { lat: null, lng: null };
+}
+
 function abrirModalParada(paradaExistente = null) {
+  cerrarMapaModal();
   const esEdicion = paradaExistente !== null;
+
+  // Pre-cargar coords si estamos editando
+  if (esEdicion && paradaExistente.lat) {
+    coordsModal = { lat: paradaExistente.lat, lng: paradaExistente.lng };
+  }
+
   const overlay = document.createElement('div');
   overlay.id = 'modal-parada';
-  overlay.className = 'fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4';
-  overlay.style.background = 'rgba(0,0,0,0.7)';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(0,0,0,0.75);overflow-y:auto';
+
   overlay.innerHTML = `
-    <div class="w-full max-w-lg rounded-2xl p-6" style="background:#1a1d26;border:1px solid #2a2d3a">
-      <h3 class="font-bold text-white mb-5" style="font-family:'Syne',sans-serif">
+    <div id="modal-inner" style="width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px;background:#1a1d26;border:1px solid #2a2d3a;margin-top:auto">
+      <div style="width:40px;height:4px;border-radius:2px;background:#2a2d3a;margin:0 auto 20px"></div>
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;font-size:18px;color:white;margin:0 0 20px">
         ${esEdicion ? 'Editar parada' : 'Agregar parada'}
       </h3>
 
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs text-gray-400 mb-1.5">Dirección <span class="text-red-400">*</span></label>
-          <div class="relative">
-            <input type="text" id="mp-direccion" placeholder="Calle, número, colonia..."
-              value="${esEdicion ? (paradaExistente.direccion || '') : ''}"
-              class="w-full px-4 py-3 rounded-xl text-white text-sm outline-none pr-10"
-              style="background:#0f1117;border:1px solid #2a2d3a"
-              onfocus="this.style.borderColor='#f97316'"
-              onblur="this.style.borderColor='#2a2d3a'">
-            <button id="btn-buscar-dir" title="Buscar coordenadas"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all"
-              style="color:#f97316">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-            </button>
-          </div>
-          <p id="mp-geo-status" class="text-xs mt-1 text-gray-600"></p>
+      <!-- Dirección con búsqueda -->
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">
+          Dirección <span style="color:#f87171">*</span>
+        </label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="mp-direccion"
+            placeholder="Escribe la dirección y presiona buscar"
+            value="${esEdicion ? (paradaExistente.direccion || '') : ''}"
+            style="flex:1;padding:12px 16px;border-radius:12px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:14px;outline:none;font-family:'DM Sans',sans-serif"
+            onfocus="this.style.borderColor='#f97316'"
+            onblur="this.style.borderColor='#2a2d3a'">
+          <button id="btn-buscar-dir"
+            style="padding:12px 16px;border-radius:12px;background:#f97316;color:white;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Syne',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:background 0.2s"
+            onmouseover="this.style.background='#ea6c0a'"
+            onmouseout="this.style.background='#f97316'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            Buscar
+          </button>
         </div>
+        <p id="mp-geo-status" style="font-size:12px;margin-top:6px;min-height:16px;color:#6b7280"></p>
+      </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs text-gray-400 mb-1.5">Latitud</label>
-            <input type="number" id="mp-lat" step="any" placeholder="Auto"
-              value="${esEdicion ? paradaExistente.lat : ''}"
-              class="w-full px-3 py-2.5 rounded-xl text-white text-sm outline-none"
-              style="background:#0f1117;border:1px solid #2a2d3a"
-              onfocus="this.style.borderColor='#f97316'"
-              onblur="this.style.borderColor='#2a2d3a'">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1.5">Longitud</label>
-            <input type="number" id="mp-lng" step="any" placeholder="Auto"
-              value="${esEdicion ? paradaExistente.lng : ''}"
-              class="w-full px-3 py-2.5 rounded-xl text-white text-sm outline-none"
-              style="background:#0f1117;border:1px solid #2a2d3a"
-              onfocus="this.style.borderColor='#f97316'"
-              onblur="this.style.borderColor='#2a2d3a'">
-          </div>
+      <!-- Mini mapa (oculto hasta buscar) -->
+      <div id="mp-mapa-wrap" style="display:none;margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid #2a2d3a">
+        <div id="mp-mapa" style="width:100%;height:220px"></div>
+        <div style="padding:8px 12px;background:#0f1117;display:flex;align-items:center;gap:6px">
+          <svg width="12" height="12" fill="#f97316" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          </svg>
+          <span id="mp-coords-display" style="font-size:11px;color:#6b7280;font-family:'DM Sans',sans-serif">
+            Arrastra el pin para ajustar la posición exacta
+          </span>
         </div>
+      </div>
 
+      <!-- Otros campos -->
+      <div style="display:flex;flex-direction:column;gap:12px">
         <div>
-          <label class="block text-xs text-gray-400 mb-1.5">Cliente</label>
-          <input type="text" id="mp-cliente" placeholder="Nombre del cliente (opcional)"
+          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">Cliente</label>
+          <input type="text" id="mp-cliente"
+            placeholder="Nombre del cliente (opcional)"
             value="${esEdicion ? paradaExistente.cliente || '' : ''}"
-            class="w-full px-4 py-3 rounded-xl text-white text-sm outline-none"
-            style="background:#0f1117;border:1px solid #2a2d3a"
+            style="width:100%;padding:12px 16px;border-radius:12px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:14px;outline:none;box-sizing:border-box;font-family:'DM Sans',sans-serif"
             onfocus="this.style.borderColor='#f97316'"
             onblur="this.style.borderColor='#2a2d3a'">
         </div>
-
         <div>
-          <label class="block text-xs text-gray-400 mb-1.5">Materiales</label>
-          <textarea id="mp-materiales" rows="2" placeholder="Ej: 3 PTR 2x4, 5 láminas galvanizadas (opcional)"
-            class="w-full px-4 py-3 rounded-xl text-white text-sm outline-none resize-none"
-            style="background:#0f1117;border:1px solid #2a2d3a"
+          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">Materiales</label>
+          <textarea id="mp-materiales" rows="2"
+            placeholder="Ej: 3 PTR 2x4, 5 láminas galvanizadas (opcional)"
+            style="width:100%;padding:12px 16px;border-radius:12px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:14px;outline:none;resize:none;box-sizing:border-box;font-family:'DM Sans',sans-serif"
             onfocus="this.style.borderColor='#f97316'"
             onblur="this.style.borderColor='#2a2d3a'">${esEdicion ? paradaExistente.materiales || '' : ''}</textarea>
         </div>
-
         <div>
-          <label class="block text-xs text-gray-400 mb-1.5">ID de Venta</label>
-          <input type="text" id="mp-id-venta" placeholder="Ej: VTA-0042 (opcional)"
+          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">ID de Venta</label>
+          <input type="text" id="mp-id-venta"
+            placeholder="Ej: VTA-0042 (opcional)"
             value="${esEdicion ? paradaExistente.idVenta || '' : ''}"
-            class="w-full px-4 py-3 rounded-xl text-white text-sm outline-none"
-            style="background:#0f1117;border:1px solid #2a2d3a"
+            style="width:100%;padding:12px 16px;border-radius:12px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:14px;outline:none;box-sizing:border-box;font-family:'DM Sans',sans-serif"
             onfocus="this.style.borderColor='#f97316'"
             onblur="this.style.borderColor='#2a2d3a'">
         </div>
       </div>
 
-      <div class="flex gap-3 mt-6">
+      <!-- Botones -->
+      <div style="display:flex;gap:12px;margin-top:20px;padding-bottom:8px">
         <button id="btn-cancelar-modal"
-          class="flex-1 py-3 rounded-xl text-sm font-medium transition-all"
-          style="background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a"
+          style="flex:1;padding:14px;border-radius:12px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;font-size:14px;font-weight:500;cursor:pointer;transition:border-color 0.2s;font-family:'DM Sans',sans-serif"
           onmouseover="this.style.borderColor='#6b7280'"
           onmouseout="this.style.borderColor='#2a2d3a'">
           Cancelar
         </button>
         <button id="btn-confirmar-modal"
-          class="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all"
-          style="background:#f97316;font-family:'Syne',sans-serif"
+          style="flex:1;padding:14px;border-radius:12px;background:#f97316;color:white;border:none;font-size:14px;font-weight:700;cursor:pointer;transition:background 0.2s;font-family:'Syne',sans-serif"
           onmouseover="this.style.background='#ea6c0a'"
           onmouseout="this.style.background='#f97316'">
-          ${esEdicion ? 'Guardar cambios' : 'Agregar'}
+          ${esEdicion ? 'Guardar cambios' : 'Agregar parada'}
         </button>
       </div>
     </div>
@@ -169,48 +184,48 @@ function abrirModalParada(paradaExistente = null) {
 
   document.body.appendChild(overlay);
 
-  document.getElementById('btn-cancelar-modal').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  // Si estamos editando y ya hay coords, mostrar el mapa de inmediato
+  if (esEdicion && coordsModal.lat) {
+    setTimeout(() => mostrarMapaModal(coordsModal.lat, coordsModal.lng, paradaExistente.direccion || ''), 100);
+  }
 
-  document.getElementById('btn-buscar-dir').addEventListener('click', async () => {
-    const dir = document.getElementById('mp-direccion').value.trim();
-    if (!dir) return;
-    const statusEl = document.getElementById('mp-geo-status');
-    statusEl.textContent = 'Buscando...';
-    statusEl.style.color = '#f97316';
-    try {
-      const coords = await geocodificar(dir);
-      document.getElementById('mp-lat').value = coords.lat;
-      document.getElementById('mp-lng').value = coords.lng;
-      statusEl.textContent = `✓ Coordenadas encontradas: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
-      statusEl.style.color = '#4ade80';
-    } catch {
-      statusEl.textContent = 'No se encontraron coordenadas. Ingresa lat/lng manualmente.';
-      statusEl.style.color = '#f87171';
-    }
+  // Cerrar al hacer clic en el overlay (no en el modal)
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) { cerrarMapaModal(); overlay.remove(); }
   });
+
+  document.getElementById('btn-cancelar-modal').addEventListener('click', () => {
+    cerrarMapaModal();
+    overlay.remove();
+  });
+
+  // Buscar al hacer Enter en el input
+  document.getElementById('mp-direccion').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); buscarDireccion(); }
+  });
+
+  document.getElementById('btn-buscar-dir').addEventListener('click', buscarDireccion);
 
   document.getElementById('btn-confirmar-modal').addEventListener('click', () => {
     const direccion = document.getElementById('mp-direccion').value.trim();
-    const lat = parseFloat(document.getElementById('mp-lat').value);
-    const lng = parseFloat(document.getElementById('mp-lng').value);
+    const statusEl = document.getElementById('mp-geo-status');
 
     if (!direccion) {
-      document.getElementById('mp-geo-status').textContent = 'La dirección es requerida';
-      document.getElementById('mp-geo-status').style.color = '#f87171';
+      statusEl.textContent = 'La dirección es requerida';
+      statusEl.style.color = '#f87171';
       return;
     }
-    if (isNaN(lat) || isNaN(lng)) {
-      document.getElementById('mp-geo-status').textContent = 'Busca las coordenadas o ingrésalas manualmente';
-      document.getElementById('mp-geo-status').style.color = '#f87171';
+    if (!coordsModal.lat || !coordsModal.lng) {
+      statusEl.textContent = 'Busca la dirección en el mapa para confirmar la ubicación';
+      statusEl.style.color = '#f87171';
       return;
     }
 
     const parada = {
       id: esEdicion ? paradaExistente.id : `p-${++contadorParada}`,
       direccion,
-      lat,
-      lng,
+      lat: coordsModal.lat,
+      lng: coordsModal.lng,
       cliente: document.getElementById('mp-cliente').value.trim(),
       materiales: document.getElementById('mp-materiales').value.trim(),
       idVenta: document.getElementById('mp-id-venta').value.trim(),
@@ -224,9 +239,80 @@ function abrirModalParada(paradaExistente = null) {
       paradas.push(parada);
     }
 
+    cerrarMapaModal();
     overlay.remove();
     renderListaParadas();
   });
+}
+
+async function buscarDireccion() {
+  const dir = document.getElementById('mp-direccion').value.trim();
+  if (!dir) return;
+
+  const statusEl = document.getElementById('mp-geo-status');
+  const btn = document.getElementById('btn-buscar-dir');
+
+  statusEl.textContent = 'Buscando...';
+  statusEl.style.color = '#f97316';
+  btn.disabled = true;
+
+  try {
+    const coords = await geocodificar(dir);
+    coordsModal = { lat: coords.lat, lng: coords.lng };
+    mostrarMapaModal(coords.lat, coords.lng, dir);
+    statusEl.textContent = '✓ Ubica el pin en el mapa. Puedes arrastrarlo para ajustar.';
+    statusEl.style.color = '#4ade80';
+  } catch {
+    statusEl.textContent = 'No se encontró esa dirección. Intenta ser más específico.';
+    statusEl.style.color = '#f87171';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function mostrarMapaModal(lat, lng, direccion) {
+  const wrap = document.getElementById('mp-mapa-wrap');
+  if (!wrap) return;
+
+  wrap.style.display = 'block';
+
+  // Destruir mapa anterior si existe
+  if (mapaModal) { mapaModal.remove(); mapaModal = null; }
+
+  mapaModal = L.map('mp-mapa', { zoomControl: true, attributionControl: false }).setView([lat, lng], 16);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(mapaModal);
+
+  const icono = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:36px;height:36px;border-radius:50% 50% 50% 0;
+      background:#f97316;transform:rotate(-45deg);
+      border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
+    "></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36]
+  });
+
+  markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
+
+  markerModal.on('dragend', e => {
+    const pos = e.target.getLatLng();
+    coordsModal = { lat: pos.lat, lng: pos.lng };
+    actualizarCoordsDisplay(pos.lat, pos.lng);
+  });
+
+  actualizarCoordsDisplay(lat, lng);
+
+  // Leaflet necesita invalidateSize cuando está en un contenedor que acaba de aparecer
+  setTimeout(() => mapaModal && mapaModal.invalidateSize(), 150);
+}
+
+function actualizarCoordsDisplay(lat, lng) {
+  const el = document.getElementById('mp-coords-display');
+  if (el) el.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Arrastra el pin para ajustar`;
 }
 
 function renderListaParadas() {
@@ -242,9 +328,9 @@ function renderListaParadas() {
         style="background:#f97316">${i + 1}</div>
       <div class="flex-1 min-w-0">
         <p class="text-white text-sm font-medium truncate">${p.direccion}</p>
-        ${p.cliente ? `<p class="text-gray-500 text-xs mt-0.5">Cliente: ${p.cliente}</p>` : ''}
-        ${p.materiales ? `<p class="text-gray-500 text-xs mt-0.5">Materiales: ${p.materiales}</p>` : ''}
-        ${p.idVenta ? `<p class="text-gray-500 text-xs mt-0.5">Venta: ${p.idVenta}</p>` : ''}
+        ${p.cliente ? `<p class="text-gray-500 text-xs mt-0.5">👤 ${p.cliente}</p>` : ''}
+        ${p.materiales ? `<p class="text-gray-500 text-xs mt-0.5">📦 ${p.materiales}</p>` : ''}
+        ${p.idVenta ? `<p class="text-gray-500 text-xs mt-0.5">🧾 ${p.idVenta}</p>` : ''}
       </div>
       <div class="flex gap-1 flex-shrink-0">
         <button data-edit="${p.id}" class="p-1.5 rounded-lg transition-all" style="color:#6b7280"
@@ -278,7 +364,7 @@ function renderListaParadas() {
 
 async function geocodificar(direccion) {
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(direccion)}&format=json&limit=1`,
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(direccion)}&format=json&limit=1&countrycodes=mx`,
     { headers: { 'User-Agent': 'RutaPro/1.0 materiales-joan-gaspar' } }
   );
   const data = await res.json();
@@ -288,20 +374,16 @@ async function geocodificar(direccion) {
 
 async function optimizarRuta(ps) {
   if (ps.length <= 1) return ps.map((p, i) => ({ ...p, orden: i }));
-
   try {
     const coords = ps.map(p => `${p.lng},${p.lat}`).join(';');
     const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false&source=first&destination=last`;
     const res = await fetch(url);
     const data = await res.json();
-
     if (data.code !== 'Ok') throw new Error(data.message);
-
     const ordenadas = new Array(ps.length);
     data.waypoints.forEach(wp => {
-      ordenadas[wp.waypoint_index] = { ...ps[wp.trips_index !== undefined ? wp.trips_index : wp.waypoint_index], orden: wp.waypoint_index };
+      ordenadas[wp.waypoint_index] = { ...ps[wp.waypoint_index], orden: wp.waypoint_index };
     });
-
     return ordenadas.filter(Boolean).map((p, i) => ({ ...p, orden: i }));
   } catch {
     return ps.map((p, i) => ({ ...p, orden: i }));
@@ -332,14 +414,12 @@ async function guardarSalida() {
   try {
     const paradasOptimizadas = await optimizarRuta(paradas);
     const usuario = usuarioActual();
-
     const id = await crearSalida({
       nombre,
       fecha: new Date(),
       creadoPor: usuario?.uid || 'desconocido',
       paradas: paradasOptimizadas
     });
-
     ir(`/salida/${id}`);
   } catch (err) {
     errorEl.textContent = 'Error al guardar: ' + err.message;
