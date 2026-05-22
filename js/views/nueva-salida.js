@@ -265,7 +265,7 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
 
   const fsOverlay = document.createElement('div');
   fsOverlay.id = 'mapa-fs-overlay';
-  fsOverlay.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;background:#0f1117';
+  fsOverlay.style.cssText = 'position:fixed;inset:0;z-index:100;background:#0f1117';
 
   fsOverlay.innerHTML = `
     <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#1a1d26;border-bottom:1px solid #2a2d3a;flex-shrink:0">
@@ -298,7 +298,7 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
       </p>
     </div>
 
-    <div id="mapa-fs-contenedor" style="flex:1;width:100%;position:relative;background:#222"></div>
+    <div id="mapa-fs-contenedor" style="width:100%;position:relative;background:#222"></div>
 
     <div style="padding:16px;background:#1a1d26;border-top:1px solid #2a2d3a;flex-shrink:0">
       <p id="mapa-fs-coords" style="font-size:12px;color:#6b7280;margin:0 0 12px;font-family:'DM Sans',sans-serif;text-align:center">
@@ -314,15 +314,38 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
 
   document.body.appendChild(fsOverlay);
 
+  // Calcular altura exacta del contenedor (window - header - footer)
+  const contenedorMapa = document.getElementById('mapa-fs-contenedor');
+  function ajustarAltura() {
+    const headerH = fsOverlay.children[0].offsetHeight;
+    const footerH = fsOverlay.children[2].offsetHeight;
+    contenedorMapa.style.height = (window.innerHeight - headerH - footerH) + 'px';
+  }
+  ajustarAltura();
+  window.addEventListener('resize', ajustarAltura);
+
   // Estado del mapa
   let coordsActuales = sinPinInicial ? null : { lat, lng };
   let marker = null;
 
-  const mapa = L.map('mapa-fs-contenedor', { zoomControl: true, attributionControl: false })
-    .setView([lat, lng], sinPinInicial ? 12 : 17);
+  // Crear mapa con setView - tiles de CartoDB (mismas que funcionan en detalle-salida)
+  const mapa = L.map(contenedorMapa, {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([lat, lng], sinPinInicial ? 12 : 17);
 
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
-    .addTo(mapa);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 19,
+    crossOrigin: true
+  }).addTo(mapa);
+
+  // Tile fallback: si CartoDB falla, usar OpenStreetMap
+  mapa.on('tileerror', () => {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 19
+    }).addTo(mapa);
+  });
 
   const icono = L.divIcon({
     className: '',
@@ -363,8 +386,10 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
   // Clic en el mapa coloca/mueve el pin
   mapa.on('click', e => colocarPin(e.latlng.lat, e.latlng.lng));
 
-  // Forzar re-render de tiles
-  setTimeout(() => mapa.invalidateSize(true), 100);
+  // Múltiples invalidateSize para asegurar render correcto
+  setTimeout(() => mapa.invalidateSize(true), 50);
+  setTimeout(() => mapa.invalidateSize(true), 300);
+  setTimeout(() => mapa.invalidateSize(true), 800);
 
   // Buscador interno del fullscreen
   async function buscarEnFullscreen() {
@@ -394,6 +419,7 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
   });
 
   document.getElementById('btn-fs-volver').addEventListener('click', () => {
+    window.removeEventListener('resize', ajustarAltura);
     mapa.remove();
     fsOverlay.remove();
   });
@@ -426,6 +452,7 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
     }
     if (statusEl) statusEl.textContent = '';
 
+    window.removeEventListener('resize', ajustarAltura);
     mapa.remove();
     fsOverlay.remove();
   });
