@@ -122,7 +122,7 @@ function abrirModalParada(paradaExistente = null) {
       </div>
 
       <!-- Mini mapa (oculto hasta buscar) -->
-      <div id="mp-mapa-wrap" style="display:none;margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid #2a2d3a">
+      <div id="mp-mapa-wrap" style="display:none;margin-bottom:16px;border-radius:12px;border:1px solid #2a2d3a">
         <div id="mp-mapa" style="width:100%;height:220px"></div>
         <div style="padding:8px 12px;background:#0f1117;display:flex;align-items:center;gap:6px">
           <svg width="12" height="12" fill="#f97316" viewBox="0 0 24 24">
@@ -263,51 +263,64 @@ async function buscarDireccion() {
     statusEl.textContent = '✓ Ubica el pin en el mapa. Puedes arrastrarlo para ajustar.';
     statusEl.style.color = '#4ade80';
   } catch {
-    statusEl.textContent = 'No se encontró esa dirección. Intenta ser más específico.';
+    statusEl.textContent = 'No se encontró esa dirección. Intenta ser más específico (ciudad, colonia).';
     statusEl.style.color = '#f87171';
+    const wrap = document.getElementById('mp-mapa-wrap');
+    if (wrap) wrap.style.display = 'none';
+    if (mapaModal) { mapaModal.remove(); mapaModal = null; }
+    coordsModal = { lat: null, lng: null };
   } finally {
     btn.disabled = false;
   }
 }
 
-function mostrarMapaModal(lat, lng, direccion) {
+function mostrarMapaModal(lat, lng) {
   const wrap = document.getElementById('mp-mapa-wrap');
   if (!wrap) return;
 
-  wrap.style.display = 'block';
-
-  // Destruir mapa anterior si existe
   if (mapaModal) { mapaModal.remove(); mapaModal = null; }
 
-  mapaModal = L.map('mp-mapa', { zoomControl: true, attributionControl: false }).setView([lat, lng], 16);
+  wrap.style.display = 'block';
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 19
-  }).addTo(mapaModal);
+  // Doble rAF: espera a que el navegador renderice el contenedor antes de que
+  // Leaflet mida sus dimensiones, evita el mapa en blanco
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const contenedor = document.getElementById('mp-mapa');
+      if (!contenedor) return;
 
-  const icono = L.divIcon({
-    className: '',
-    html: `<div style="
-      width:36px;height:36px;border-radius:50% 50% 50% 0;
-      background:#f97316;transform:rotate(-45deg);
-      border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
-    "></div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 36]
+      mapaModal = L.map(contenedor, { zoomControl: true, attributionControl: false })
+        .setView([lat, lng], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        subdomains: 'abc',
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(mapaModal);
+
+      const icono = L.divIcon({
+        className: '',
+        html: `<div style="
+          width:36px;height:36px;border-radius:50% 50% 50% 0;
+          background:#f97316;transform:rotate(-45deg);
+          border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
+        "></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 36]
+      });
+
+      markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
+
+      markerModal.on('dragend', e => {
+        const pos = e.target.getLatLng();
+        coordsModal = { lat: pos.lat, lng: pos.lng };
+        actualizarCoordsDisplay(pos.lat, pos.lng);
+      });
+
+      actualizarCoordsDisplay(lat, lng);
+      mapaModal.invalidateSize();
+    });
   });
-
-  markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
-
-  markerModal.on('dragend', e => {
-    const pos = e.target.getLatLng();
-    coordsModal = { lat: pos.lat, lng: pos.lng };
-    actualizarCoordsDisplay(pos.lat, pos.lng);
-  });
-
-  actualizarCoordsDisplay(lat, lng);
-
-  // Leaflet necesita invalidateSize cuando está en un contenedor que acaba de aparecer
-  setTimeout(() => mapaModal && mapaModal.invalidateSize(), 150);
 }
 
 function actualizarCoordsDisplay(lat, lng) {
