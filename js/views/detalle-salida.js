@@ -173,9 +173,8 @@ function iniciarMapa(paradas) {
 
   mapaInstancia = L.map('mapa-contenedor', { zoomControl: true }).setView(centro, 12);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    subdomains: 'abcd',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
     maxZoom: 19
   }).addTo(mapaInstancia);
 

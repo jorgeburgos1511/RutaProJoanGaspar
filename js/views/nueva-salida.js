@@ -334,18 +334,10 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
     attributionControl: false
   }).setView([lat, lng], sinPinInicial ? 12 : 17);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    crossOrigin: true
+    attribution: '© OpenStreetMap'
   }).addTo(mapa);
-
-  // Tile fallback: si CartoDB falla, usar OpenStreetMap
-  mapa.on('tileerror', () => {
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 19
-    }).addTo(mapa);
-  });
 
   const icono = L.divIcon({
     className: '',
