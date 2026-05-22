@@ -78,7 +78,7 @@ function abrirModalParada(paradaExistente = null) {
   const esEdicion = paradaExistente !== null;
   const overlay = document.createElement('div');
   overlay.id = 'modal-parada';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.75);overflow-y:auto';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);overflow-y:auto;padding:16px';
 
   const ubicacionHTML = coordsModal.lat
     ? `<div id="mp-ubicacion-badge" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#002210;border:1px solid #15803440;margin-bottom:4px">
@@ -89,8 +89,7 @@ function abrirModalParada(paradaExistente = null) {
     : '';
 
   overlay.innerHTML = `
-    <div id="modal-inner" style="width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px;background:#1a1d26;border:1px solid #2a2d3a;margin-top:auto">
-      <div style="width:40px;height:4px;border-radius:2px;background:#2a2d3a;margin:0 auto 20px"></div>
+    <div id="modal-inner" style="width:100%;max-width:520px;border-radius:24px;padding:24px;background:#1a1d26;border:1px solid #2a2d3a">
       <h3 style="font-family:'Syne',sans-serif;font-weight:700;font-size:18px;color:white;margin:0 0 20px">
         ${esEdicion ? 'Editar parada' : 'Agregar parada'}
       </h3>
@@ -378,10 +377,7 @@ function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
   // Clic en el mapa coloca/mueve el pin
   mapa.on('click', e => colocarPin(e.latlng.lat, e.latlng.lng));
 
-  // Múltiples invalidateSize para asegurar render correcto
-  setTimeout(() => mapa.invalidateSize(true), 50);
-  setTimeout(() => mapa.invalidateSize(true), 300);
-  setTimeout(() => mapa.invalidateSize(true), 800);
+  setTimeout(() => mapa.invalidateSize(), 100);
 
   // Buscador interno del fullscreen
   async function buscarEnFullscreen() {
