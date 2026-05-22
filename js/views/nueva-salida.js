@@ -103,7 +103,7 @@ function abrirModalParada(paradaExistente = null) {
         </label>
         <div style="display:flex;gap:8px">
           <input type="text" id="mp-direccion"
-            placeholder="Escribe la dirección y presiona buscar"
+            placeholder="Ej: Av. Vallarta 1234, Guadalajara"
             value="${esEdicion ? (paradaExistente.direccion || '') : ''}"
             style="flex:1;padding:12px 16px;border-radius:12px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:14px;outline:none;font-family:'DM Sans',sans-serif"
             onfocus="this.style.borderColor='#f97316'"
@@ -282,45 +282,53 @@ function mostrarMapaModal(lat, lng) {
 
   wrap.style.display = 'block';
 
-  // Doble rAF: espera a que el navegador renderice el contenedor antes de que
-  // Leaflet mida sus dimensiones, evita el mapa en blanco
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const contenedor = document.getElementById('mp-mapa');
-      if (!contenedor) return;
+  // setTimeout asegura que el browser terminó el layout del modal antes
+  // de que Leaflet mida el contenedor (más confiable que rAF en modals)
+  setTimeout(() => {
+    const contenedor = document.getElementById('mp-mapa');
+    if (!contenedor) return;
 
-      mapaModal = L.map(contenedor, { zoomControl: true, attributionControl: false })
-        .setView([lat, lng], 16);
+    // Forzar dimensiones explícitas para que Leaflet no calcule 0x0
+    const modalInner = document.getElementById('modal-inner');
+    const ancho = modalInner ? modalInner.offsetWidth - 50 : 460;
+    contenedor.style.width = ancho + 'px';
+    contenedor.style.height = '220px';
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        subdomains: 'abc',
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-      }).addTo(mapaModal);
+    mapaModal = L.map(contenedor, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: false
+    }).setView([lat, lng], 16);
 
-      const icono = L.divIcon({
-        className: '',
-        html: `<div style="
-          width:36px;height:36px;border-radius:50% 50% 50% 0;
-          background:#f97316;transform:rotate(-45deg);
-          border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
-        "></div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 36]
-      });
+    // URL sin subdominios — más simple y confiable en modals
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(mapaModal);
 
-      markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
-
-      markerModal.on('dragend', e => {
-        const pos = e.target.getLatLng();
-        coordsModal = { lat: pos.lat, lng: pos.lng };
-        actualizarCoordsDisplay(pos.lat, pos.lng);
-      });
-
-      actualizarCoordsDisplay(lat, lng);
-      mapaModal.invalidateSize();
+    const icono = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:36px;height:36px;border-radius:50% 50% 50% 0;
+        background:#f97316;transform:rotate(-45deg);
+        border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
+      "></div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 36]
     });
-  });
+
+    markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
+
+    markerModal.on('dragend', e => {
+      const pos = e.target.getLatLng();
+      coordsModal = { lat: pos.lat, lng: pos.lng };
+      actualizarCoordsDisplay(pos.lat, pos.lng);
+    });
+
+    actualizarCoordsDisplay(lat, lng);
+
+    // Segundo invalidateSize después de que los tiles arranquen
+    setTimeout(() => mapaModal && mapaModal.invalidateSize(true), 200);
+  }, 300);
 }
 
 function actualizarCoordsDisplay(lat, lng) {
@@ -376,8 +384,12 @@ function renderListaParadas() {
 }
 
 async function geocodificar(direccion) {
+  // Siempre busca dentro de Jalisco para evitar resultados fuera del estado
+  const yaIncluye = /jalisco|guadalajara|zapopan|tlaquepaque|tonalá|tonala|tlajomulco/i.test(direccion);
+  const query = yaIncluye ? direccion : `${direccion}, Jalisco, México`;
+
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(direccion)}&format=json&limit=1&countrycodes=mx`,
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=mx`,
     { headers: { 'User-Agent': 'RutaPro/1.0 materiales-joan-gaspar' } }
   );
   const data = await res.json();
