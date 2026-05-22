@@ -111,9 +111,9 @@ function abrirModalParada(paradaExistente = null) {
             onmouseover="this.style.background='#ea6c0a'"
             onmouseout="this.style.background='#f97316'">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
             </svg>
-            Buscar
+            Abrir mapa
           </button>
         </div>
         <p id="mp-geo-status" style="font-size:12px;margin-top:6px;min-height:16px;color:#6b7280"></p>
@@ -219,14 +219,28 @@ function abrirModalParada(paradaExistente = null) {
 
 // ─── Búsqueda + mapa fullscreen ───────────────────────────────────────────────
 
+// Centro de Guadalajara como fallback
+const GDL_CENTRO = { lat: 20.6597, lng: -103.3496 };
+
 async function buscarYAbrirMapa() {
   const dir = document.getElementById('mp-direccion').value.trim();
-  if (!dir) return;
-
   const statusEl = document.getElementById('mp-geo-status');
   const btn = document.getElementById('btn-buscar-dir');
 
-  statusEl.textContent = 'Buscando...';
+  // Si ya tenemos coords (modo edición o búsqueda previa), abrir directo ahí
+  if (coordsModal.lat) {
+    abrirMapaFullscreen(coordsModal.lat, coordsModal.lng, dir, false);
+    return;
+  }
+
+  // Si no hay dirección escrita, abrir mapa en GDL para que ponga el pin manualmente
+  if (!dir) {
+    abrirMapaFullscreen(GDL_CENTRO.lat, GDL_CENTRO.lng, '', true);
+    return;
+  }
+
+  // Intentar geocodificar, pero abrir el mapa SIEMPRE (con o sin éxito)
+  statusEl.textContent = 'Buscando dirección...';
   statusEl.style.color = '#f97316';
   btn.disabled = true;
 
@@ -234,16 +248,17 @@ async function buscarYAbrirMapa() {
     const coords = await geocodificar(dir);
     coordsModal = { lat: coords.lat, lng: coords.lng };
     statusEl.textContent = '';
-    abrirMapaFullscreen(coords.lat, coords.lng);
+    abrirMapaFullscreen(coords.lat, coords.lng, dir, false);
   } catch {
-    statusEl.textContent = 'No se encontró. Intenta: "Calle Número, Colonia, Guadalajara"';
-    statusEl.style.color = '#f87171';
+    // No se encontró → abrir mapa en GDL, usuario coloca el pin manualmente
+    statusEl.textContent = '';
+    abrirMapaFullscreen(GDL_CENTRO.lat, GDL_CENTRO.lng, dir, true);
   } finally {
     btn.disabled = false;
   }
 }
 
-function abrirMapaFullscreen(lat, lng) {
+function abrirMapaFullscreen(lat, lng, dirInicial = '', sinPinInicial = false) {
   // Eliminar instancia anterior si existe
   const anterior = document.getElementById('mapa-fs-overlay');
   if (anterior) anterior.remove();
@@ -253,39 +268,58 @@ function abrirMapaFullscreen(lat, lng) {
   fsOverlay.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;background:#0f1117';
 
   fsOverlay.innerHTML = `
-    <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;background:#1a1d26;border-bottom:1px solid #2a2d3a;flex-shrink:0">
-      <button id="btn-fs-volver"
-        style="padding:8px 14px;border-radius:10px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-        Volver
-      </button>
-      <div style="flex:1">
-        <p style="color:white;font-size:14px;font-weight:600;margin:0;font-family:'Syne',sans-serif">Confirma la ubicación</p>
-        <p style="color:#6b7280;font-size:12px;margin:0">Toca el mapa o arrastra el pin para ajustar</p>
+    <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#1a1d26;border-bottom:1px solid #2a2d3a;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button id="btn-fs-volver"
+          style="padding:8px 12px;border-radius:10px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px;font-family:'DM Sans',sans-serif;flex-shrink:0">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+          Volver
+        </button>
+        <p style="color:white;font-size:14px;font-weight:600;margin:0;font-family:'Syne',sans-serif;flex:1">
+          Selecciona la ubicación
+        </p>
       </div>
+
+      <div style="display:flex;gap:8px">
+        <input type="text" id="mp-fs-buscar"
+          placeholder="Buscar otra dirección..."
+          value="${dirInicial}"
+          style="flex:1;padding:10px 14px;border-radius:10px;background:#0f1117;border:1px solid #2a2d3a;color:white;font-size:13px;outline:none;font-family:'DM Sans',sans-serif"
+          onfocus="this.style.borderColor='#f97316'"
+          onblur="this.style.borderColor='#2a2d3a'">
+        <button id="btn-fs-buscar-dir"
+          style="padding:10px 14px;border-radius:10px;background:#f97316;color:white;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:'Syne',sans-serif">
+          Buscar
+        </button>
+      </div>
+
+      <p id="mp-fs-status" style="font-size:11px;color:#6b7280;margin:0;min-height:14px">
+        ${sinPinInicial ? '👆 Toca el mapa donde está la ubicación o busca otra dirección' : '👆 Arrastra el pin o toca otro punto para ajustar'}
+      </p>
     </div>
 
-    <div id="mapa-fs-contenedor" style="flex:1;width:100%;position:relative"></div>
+    <div id="mapa-fs-contenedor" style="flex:1;width:100%;position:relative;background:#222"></div>
 
     <div style="padding:16px;background:#1a1d26;border-top:1px solid #2a2d3a;flex-shrink:0">
       <p id="mapa-fs-coords" style="font-size:12px;color:#6b7280;margin:0 0 12px;font-family:'DM Sans',sans-serif;text-align:center">
-        📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}
+        ${sinPinInicial ? '📍 Sin ubicación seleccionada' : `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`}
       </p>
       <button id="btn-fs-confirmar"
-        style="width:100%;padding:16px;border-radius:14px;background:#f97316;color:white;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif"
-        onmouseover="this.style.background='#ea6c0a'"
-        onmouseout="this.style.background='#f97316'">
-        ✓ Confirmar esta ubicación
+        style="width:100%;padding:16px;border-radius:14px;background:${sinPinInicial ? '#3a3d4a' : '#f97316'};color:white;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;transition:background 0.2s"
+        ${sinPinInicial ? 'disabled' : ''}>
+        ${sinPinInicial ? 'Selecciona un punto en el mapa' : '✓ Confirmar esta ubicación'}
       </button>
     </div>
   `;
 
   document.body.appendChild(fsOverlay);
 
-  // Leaflet en un div top-level (no dentro de modal) — funciona siempre
-  let coordsActuales = { lat, lng };
+  // Estado del mapa
+  let coordsActuales = sinPinInicial ? null : { lat, lng };
+  let marker = null;
+
   const mapa = L.map('mapa-fs-contenedor', { zoomControl: true, attributionControl: false })
-    .setView([lat, lng], 17);
+    .setView([lat, lng], sinPinInicial ? 12 : 17);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
     .addTo(mapa);
@@ -297,23 +331,66 @@ function abrirMapaFullscreen(lat, lng) {
     iconAnchor: [18, 36]
   });
 
-  const marker = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapa);
-
-  function actualizarCoords(nuevoLat, nuevoLng) {
+  function colocarPin(nuevoLat, nuevoLng) {
     coordsActuales = { lat: nuevoLat, lng: nuevoLng };
-    const el = document.getElementById('mapa-fs-coords');
-    if (el) el.textContent = `📍 ${nuevoLat.toFixed(5)}, ${nuevoLng.toFixed(5)}`;
+    if (!marker) {
+      marker = L.marker([nuevoLat, nuevoLng], { icon: icono, draggable: true }).addTo(mapa);
+      marker.on('dragend', e => {
+        const p = e.target.getLatLng();
+        coordsActuales = { lat: p.lat, lng: p.lng };
+        actualizarUICoords();
+      });
+    } else {
+      marker.setLatLng([nuevoLat, nuevoLng]);
+    }
+    actualizarUICoords();
   }
 
-  marker.on('dragend', e => {
-    const p = e.target.getLatLng();
-    actualizarCoords(p.lat, p.lng);
-  });
+  function actualizarUICoords() {
+    if (!coordsActuales) return;
+    const el = document.getElementById('mapa-fs-coords');
+    const btn = document.getElementById('btn-fs-confirmar');
+    if (el) el.textContent = `📍 ${coordsActuales.lat.toFixed(5)}, ${coordsActuales.lng.toFixed(5)}`;
+    if (btn) {
+      btn.disabled = false;
+      btn.style.background = '#f97316';
+      btn.textContent = '✓ Confirmar esta ubicación';
+    }
+  }
 
-  // Clic en el mapa mueve el pin
-  mapa.on('click', e => {
-    marker.setLatLng(e.latlng);
-    actualizarCoords(e.latlng.lat, e.latlng.lng);
+  if (!sinPinInicial) colocarPin(lat, lng);
+
+  // Clic en el mapa coloca/mueve el pin
+  mapa.on('click', e => colocarPin(e.latlng.lat, e.latlng.lng));
+
+  // Forzar re-render de tiles
+  setTimeout(() => mapa.invalidateSize(true), 100);
+
+  // Buscador interno del fullscreen
+  async function buscarEnFullscreen() {
+    const q = document.getElementById('mp-fs-buscar').value.trim();
+    if (!q) return;
+    const status = document.getElementById('mp-fs-status');
+    status.textContent = 'Buscando...';
+    status.style.color = '#f97316';
+    try {
+      const coords = await geocodificar(q);
+      mapa.setView([coords.lat, coords.lng], 17);
+      colocarPin(coords.lat, coords.lng);
+      status.textContent = '✓ Encontrado. Ajusta si es necesario.';
+      status.style.color = '#4ade80';
+      // Actualizar también el campo de dirección del modal padre
+      const dirInput = document.getElementById('mp-direccion');
+      if (dirInput) dirInput.value = q;
+    } catch {
+      status.textContent = 'No se encontró. Toca el mapa donde está la ubicación.';
+      status.style.color = '#f87171';
+    }
+  }
+
+  document.getElementById('btn-fs-buscar-dir').addEventListener('click', buscarEnFullscreen);
+  document.getElementById('mp-fs-buscar').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); buscarEnFullscreen(); }
   });
 
   document.getElementById('btn-fs-volver').addEventListener('click', () => {
@@ -322,30 +399,32 @@ function abrirMapaFullscreen(lat, lng) {
   });
 
   document.getElementById('btn-fs-confirmar').addEventListener('click', () => {
+    if (!coordsActuales) return;
     coordsModal = { lat: coordsActuales.lat, lng: coordsActuales.lng };
 
-    // Actualizar badge en el modal
-    const badge = document.getElementById('mp-ubicacion-badge');
+    // Crear o actualizar badge en el modal padre
     const statusEl = document.getElementById('mp-geo-status');
-    if (badge) {
-      badge.querySelector('span').textContent = `Ubicación confirmada (${coordsActuales.lat.toFixed(4)}, ${coordsActuales.lng.toFixed(4)})`;
-    } else if (statusEl) {
-      // Si no existe el badge, crearlo
-      const wrapper = statusEl.parentElement;
-      const div = document.createElement('div');
-      div.id = 'mp-ubicacion-badge';
-      div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#002210;border:1px solid #15803440;margin-top:8px';
-      div.innerHTML = `
+    let badge = document.getElementById('mp-ubicacion-badge');
+
+    if (!badge && statusEl) {
+      badge = document.createElement('div');
+      badge.id = 'mp-ubicacion-badge';
+      badge.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#002210;border:1px solid #15803440;margin-top:8px';
+      badge.innerHTML = `
         <svg width="14" height="14" fill="#4ade80" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
-        <span style="font-size:12px;color:#4ade80;flex:1">Ubicación confirmada (${coordsActuales.lat.toFixed(4)}, ${coordsActuales.lng.toFixed(4)})</span>
+        <span style="font-size:12px;color:#4ade80;flex:1"></span>
         <button id="btn-cambiar-ubicacion" style="font-size:11px;color:#9ca3af;background:none;border:none;cursor:pointer;text-decoration:underline">Cambiar</button>
       `;
-      wrapper.appendChild(div);
-      div.querySelector('#btn-cambiar-ubicacion').addEventListener('click', () => {
-        abrirMapaFullscreen(coordsModal.lat, coordsModal.lng);
+      statusEl.parentElement.appendChild(badge);
+      badge.querySelector('#btn-cambiar-ubicacion').addEventListener('click', () => {
+        abrirMapaFullscreen(coordsModal.lat, coordsModal.lng, document.getElementById('mp-direccion').value.trim(), false);
       });
-      if (statusEl) statusEl.textContent = '';
     }
+
+    if (badge) {
+      badge.querySelector('span').textContent = `Ubicación confirmada (${coordsActuales.lat.toFixed(4)}, ${coordsActuales.lng.toFixed(4)})`;
+    }
+    if (statusEl) statusEl.textContent = '';
 
     mapa.remove();
     fsOverlay.remove();
