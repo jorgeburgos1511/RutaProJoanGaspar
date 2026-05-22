@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "materiales-joan-gaspar"
+  },
+  "targets": {
+    "materiales-joan-gaspar": {
+      "hosting": {
+        "rutapro": ["rutapro-joan-gaspar"]
+      }
+    }
+  }
+}

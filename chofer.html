@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RutaPro – Mi ruta</title>
+  <meta name="description" content="Vista del chofer con paradas de entrega">
+  <meta name="theme-color" content="#1e293b">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+
+  <!-- Estilos propios -->
+  <link rel="stylesheet" href="/css/styles.css">
+
+  <style>
+    body { background: #f8fafc; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #f97316;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="chofer-body">
+
+  <!-- Header fijo -->
+  <div class="chofer-header">
+    <div style="display:flex;align-items:center;gap:10px;max-width:600px;margin:0 auto">
+      <div style="width:36px;height:36px;border-radius:10px;background:#f97316;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="18" height="18" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M1 3h15l4 9H5L1 3z"/><path d="M5 12l-1 7h16"/>
+          <circle cx="9" cy="21" r="1.5"/><circle cx="18" cy="21" r="1.5"/>
+        </svg>
+      </div>
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:17px;letter-spacing:-0.3px">RutaPro</div>
+        <div id="header-subtitulo" style="font-size:12px;color:#94a3b8">Cargando ruta...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contenido principal -->
+  <div id="contenido" style="max-width:600px;margin:0 auto;padding:20px 16px 40px">
+    <div style="text-align:center;padding:60px 0">
+      <div class="spinner" style="margin-bottom:16px"></div>
+      <p style="color:#94a3b8;font-size:15px">Cargando tu ruta...</p>
+    </div>
+  </div>
+
+  <!-- Firebase SDK modular -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getFirestore, doc, getDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB7CSRQklwbrBEyS6Uwgiz6d5QC85gqLT0",
+      authDomain: "materiales-joan-gaspar.firebaseapp.com",
+      projectId: "materiales-joan-gaspar",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const params = new URLSearchParams(location.search);
+    const salidaId = params.get('salida');
+
+    async function cargarSalida() {
+      const contenedor = document.getElementById('contenido');
+
+      if (!salidaId) {
+        contenedor.innerHTML = errorHTML('Enlace inválido', 'No se encontró el ID de la salida en la URL.');
+        return;
+      }
+
+      try {
+        const snap = await getDoc(doc(db, 'salidas', salidaId));
+
+        if (!snap.exists()) {
+          contenedor.innerHTML = errorHTML('Ruta no encontrada', 'Este enlace no corresponde a ninguna salida.');
+          return;
+        }
+
+        const salida = { id: snap.id, ...snap.data() };
+        renderSalida(salida, contenedor);
+      } catch (err) {
+        contenedor.innerHTML = errorHTML('Error al cargar', err.message);
+      }
+    }
+
+    function renderSalida(salida, contenedor) {
+      const paradas = salida.paradas || [];
+      const fecha = salida.fecha
+        ? new Date(salida.fecha.seconds ? salida.fecha.seconds * 1000 : salida.fecha)
+            .toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+        : '—';
+
+      document.getElementById('header-subtitulo').textContent = salida.nombre;
+      document.title = `RutaPro – ${salida.nombre}`;
+
+      const completadas = paradas.filter(p => p.completada).length;
+
+      contenedor.innerHTML = `
+        <div style="margin-bottom:24px">
+          <h1 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#1e293b;margin:0 0 4px;letter-spacing:-0.5px">
+            ${salida.nombre}
+          </h1>
+          <p style="color:#64748b;font-size:14px;margin:0 0 12px;text-transform:capitalize">${fecha}</p>
+          <div style="display:flex;align-items:center;gap:10px;background:white;border-radius:12px;padding:12px 16px;border:1px solid #e2e8f0">
+            <div style="font-size:22px;font-weight:800;font-family:'Syne',sans-serif;color:#f97316">${completadas}/${paradas.length}</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1e293b">Paradas completadas</div>
+              <div style="font-size:12px;color:#94a3b8">${paradas.length - completadas} pendiente${paradas.length - completadas !== 1 ? 's' : ''}</div>
+            </div>
+            <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;margin-left:8px">
+              <div style="height:6px;border-radius:3px;background:#22c55e;width:${paradas.length ? (completadas/paradas.length*100) : 0}%;transition:width 0.5s"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="lista-paradas-chofer">
+          ${paradas.map((p, i) => tarjetaParadaChofer(p, i, salidaId)).join('')}
+        </div>
+
+        ${paradas.length === 0 ? `
+          <div style="text-align:center;padding:40px 20px;color:#94a3b8">
+            <p style="font-size:16px">Esta ruta no tiene paradas registradas.</p>
+          </div>
+        ` : ''}
+      `;
+
+      // Vincular botones de marcar completado
+      paradas.forEach((p, i) => {
+        const btn = document.getElementById(`check-${i}`);
+        if (btn && !p.completada) {
+          btn.addEventListener('click', () => marcarCompletada(salida, i));
+        }
+      });
+    }
+
+    function tarjetaParadaChofer(p, i, _salidaId) {
+      return `
+        <div id="parada-card-${i}" class="chofer-parada ${p.completada ? 'completada' : ''}">
+          <div style="display:flex;align-items:flex-start;gap:14px">
+            <div id="num-${i}" class="chofer-numero ${p.completada ? 'hecho' : ''}">
+              ${p.completada ? '✓' : i + 1}
+            </div>
+            <div style="flex:1;min-width:0">
+              <p style="font-size:18px;font-weight:600;color:#1e293b;margin:0 0 6px;line-height:1.3;
+                ${p.completada ? 'text-decoration:line-through;color:#94a3b8' : ''}">
+                ${p.direccion}
+              </p>
+              ${p.cliente ? `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                  <span style="font-size:18px">👤</span>
+                  <span style="font-size:15px;color:#475569;font-weight:500">${p.cliente}</span>
+                </div>
+              ` : ''}
+              ${p.materiales ? `
+                <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-top:8px">
+                  <div style="font-size:11px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">📦 Materiales</div>
+                  <div style="font-size:15px;color:#7c2d12;font-weight:500">${p.materiales}</div>
+                </div>
+              ` : ''}
+              ${p.idVenta ? `
+                <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+                  <span style="font-size:16px">🧾</span>
+                  <span style="font-size:13px;color:#64748b">Venta: <strong>${p.idVenta}</strong></span>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener"
+            class="chofer-btn-maps" style="${p.completada ? 'opacity:0.5;pointer-events:none' : ''}">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+            </svg>
+            Abrir en Google Maps
+          </a>
+
+          <button id="check-${i}" class="chofer-btn-check" ${p.completada ? 'disabled' : ''}>
+            ${p.completada
+              ? '<span>✓ Entrega completada</span>'
+              : '<span>✅ Marcar como completada</span>'
+            }
+          </button>
+        </div>
+      `;
+    }
+
+    async function marcarCompletada(salida, index) {
+      const btn = document.getElementById(`check-${index}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Guardando...</span>';
+      }
+
+      try {
+        const nuevasParadas = salida.paradas.map((p, i) =>
+          i === index ? { ...p, completada: true } : p
+        );
+
+        await updateDoc(doc(db, 'salidas', salida.id), { paradas: nuevasParadas });
+
+        salida.paradas = nuevasParadas;
+
+        // Actualizar UI sin recargar todo
+        const card = document.getElementById(`parada-card-${index}`);
+        const num = document.getElementById(`num-${index}`);
+        if (card) card.classList.add('completada');
+        if (num) {
+          num.classList.add('hecho');
+          num.textContent = '✓';
+        }
+        if (btn) {
+          btn.innerHTML = '<span>✓ Entrega completada</span>';
+        }
+
+        // Actualizar contador de progreso
+        const completadas = salida.paradas.filter(p => p.completada).length;
+        const total = salida.paradas.length;
+        const contadorEl = document.querySelector('[style*="font-size:22px"]');
+        if (contadorEl) contadorEl.textContent = `${completadas}/${total}`;
+        const progressEl = document.querySelector('[style*="height:6px;border-radius:3px;background:#22c55e"]');
+        if (progressEl) progressEl.style.width = `${(completadas/total)*100}%`;
+
+      } catch (err) {
+        alert('Error al guardar: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>✅ Marcar como completada</span>';
+        }
+      }
+    }
+
+    function errorHTML(titulo, mensaje) {
+      return `
+        <div style="text-align:center;padding:60px 20px">
+          <div style="font-size:48px;margin-bottom:16px">🚫</div>
+          <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:#1e293b;margin:0 0 8px">${titulo}</h2>
+          <p style="color:#64748b;font-size:15px">${mensaje}</p>
+        </div>
+      `;
+    }
+
+    cargarSalida();
+  </script>
+
+</body>
+</html>
