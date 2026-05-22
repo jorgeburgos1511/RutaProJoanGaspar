@@ -4,8 +4,6 @@ import { ir } from '../router.js';
 
 let paradas = [];
 let contadorParada = 0;
-let mapaModal = null;
-let markerModal = null;
 let coordsModal = { lat: null, lng: null };
 
 export function renderNuevaSalida(contenedor) {
@@ -70,24 +68,25 @@ export function renderNuevaSalida(contenedor) {
   document.getElementById('btn-guardar').addEventListener('click', guardarSalida);
 }
 
-function cerrarMapaModal() {
-  if (mapaModal) { mapaModal.remove(); mapaModal = null; }
-  markerModal = null;
-  coordsModal = { lat: null, lng: null };
-}
+// ─── Modal de parada ─────────────────────────────────────────────────────────
 
 function abrirModalParada(paradaExistente = null) {
-  cerrarMapaModal();
+  coordsModal = paradaExistente?.lat
+    ? { lat: paradaExistente.lat, lng: paradaExistente.lng }
+    : { lat: null, lng: null };
+
   const esEdicion = paradaExistente !== null;
-
-  // Pre-cargar coords si estamos editando
-  if (esEdicion && paradaExistente.lat) {
-    coordsModal = { lat: paradaExistente.lat, lng: paradaExistente.lng };
-  }
-
   const overlay = document.createElement('div');
   overlay.id = 'modal-parada';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(0,0,0,0.75);overflow-y:auto';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.75);overflow-y:auto';
+
+  const ubicacionHTML = coordsModal.lat
+    ? `<div id="mp-ubicacion-badge" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#002210;border:1px solid #15803440;margin-bottom:4px">
+        <svg width="14" height="14" fill="#4ade80" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        <span style="font-size:12px;color:#4ade80;flex:1">Ubicación confirmada (${coordsModal.lat.toFixed(4)}, ${coordsModal.lng.toFixed(4)})</span>
+        <button id="btn-cambiar-ubicacion" style="font-size:11px;color:#9ca3af;background:none;border:none;cursor:pointer;text-decoration:underline">Cambiar</button>
+      </div>`
+    : '';
 
   overlay.innerHTML = `
     <div id="modal-inner" style="width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:24px;background:#1a1d26;border:1px solid #2a2d3a;margin-top:auto">
@@ -96,8 +95,7 @@ function abrirModalParada(paradaExistente = null) {
         ${esEdicion ? 'Editar parada' : 'Agregar parada'}
       </h3>
 
-      <!-- Dirección con búsqueda -->
-      <div style="margin-bottom:12px">
+      <div style="margin-bottom:16px">
         <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">
           Dirección <span style="color:#f87171">*</span>
         </label>
@@ -109,7 +107,7 @@ function abrirModalParada(paradaExistente = null) {
             onfocus="this.style.borderColor='#f97316'"
             onblur="this.style.borderColor='#2a2d3a'">
           <button id="btn-buscar-dir"
-            style="padding:12px 16px;border-radius:12px;background:#f97316;color:white;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Syne',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:background 0.2s"
+            style="padding:12px 16px;border-radius:12px;background:#f97316;color:white;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Syne',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px"
             onmouseover="this.style.background='#ea6c0a'"
             onmouseout="this.style.background='#f97316'">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -119,22 +117,9 @@ function abrirModalParada(paradaExistente = null) {
           </button>
         </div>
         <p id="mp-geo-status" style="font-size:12px;margin-top:6px;min-height:16px;color:#6b7280"></p>
+        ${ubicacionHTML}
       </div>
 
-      <!-- Mini mapa (oculto hasta buscar) -->
-      <div id="mp-mapa-wrap" style="display:none;margin-bottom:16px;border-radius:12px;border:1px solid #2a2d3a">
-        <div id="mp-mapa" style="width:100%;height:220px"></div>
-        <div style="padding:8px 12px;background:#0f1117;display:flex;align-items:center;gap:6px">
-          <svg width="12" height="12" fill="#f97316" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-          </svg>
-          <span id="mp-coords-display" style="font-size:11px;color:#6b7280;font-family:'DM Sans',sans-serif">
-            Arrastra el pin para ajustar la posición exacta
-          </span>
-        </div>
-      </div>
-
-      <!-- Otros campos -->
       <div style="display:flex;flex-direction:column;gap:12px">
         <div>
           <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:6px">Cliente</label>
@@ -164,16 +149,15 @@ function abrirModalParada(paradaExistente = null) {
         </div>
       </div>
 
-      <!-- Botones -->
       <div style="display:flex;gap:12px;margin-top:20px;padding-bottom:8px">
         <button id="btn-cancelar-modal"
-          style="flex:1;padding:14px;border-radius:12px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;font-size:14px;font-weight:500;cursor:pointer;transition:border-color 0.2s;font-family:'DM Sans',sans-serif"
+          style="flex:1;padding:14px;border-radius:12px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif"
           onmouseover="this.style.borderColor='#6b7280'"
           onmouseout="this.style.borderColor='#2a2d3a'">
           Cancelar
         </button>
         <button id="btn-confirmar-modal"
-          style="flex:1;padding:14px;border-radius:12px;background:#f97316;color:white;border:none;font-size:14px;font-weight:700;cursor:pointer;transition:background 0.2s;font-family:'Syne',sans-serif"
+          style="flex:1;padding:14px;border-radius:12px;background:#f97316;color:white;border:none;font-size:14px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif"
           onmouseover="this.style.background='#ea6c0a'"
           onmouseout="this.style.background='#f97316'">
           ${esEdicion ? 'Guardar cambios' : 'Agregar parada'}
@@ -184,27 +168,16 @@ function abrirModalParada(paradaExistente = null) {
 
   document.body.appendChild(overlay);
 
-  // Si estamos editando y ya hay coords, mostrar el mapa de inmediato
-  if (esEdicion && coordsModal.lat) {
-    setTimeout(() => mostrarMapaModal(coordsModal.lat, coordsModal.lng, paradaExistente.direccion || ''), 100);
-  }
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('btn-cancelar-modal').addEventListener('click', () => overlay.remove());
 
-  // Cerrar al hacer clic en el overlay (no en el modal)
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) { cerrarMapaModal(); overlay.remove(); }
-  });
-
-  document.getElementById('btn-cancelar-modal').addEventListener('click', () => {
-    cerrarMapaModal();
-    overlay.remove();
-  });
-
-  // Buscar al hacer Enter en el input
   document.getElementById('mp-direccion').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); buscarDireccion(); }
+    if (e.key === 'Enter') { e.preventDefault(); buscarYAbrirMapa(); }
   });
-
-  document.getElementById('btn-buscar-dir').addEventListener('click', buscarDireccion);
+  document.getElementById('btn-buscar-dir').addEventListener('click', buscarYAbrirMapa);
+  document.getElementById('btn-cambiar-ubicacion')?.addEventListener('click', () => {
+    if (coordsModal.lat) abrirMapaFullscreen(coordsModal.lat, coordsModal.lng);
+  });
 
   document.getElementById('btn-confirmar-modal').addEventListener('click', () => {
     const direccion = document.getElementById('mp-direccion').value.trim();
@@ -215,8 +188,8 @@ function abrirModalParada(paradaExistente = null) {
       statusEl.style.color = '#f87171';
       return;
     }
-    if (!coordsModal.lat || !coordsModal.lng) {
-      statusEl.textContent = 'Busca la dirección en el mapa para confirmar la ubicación';
+    if (!coordsModal.lat) {
+      statusEl.textContent = 'Primero busca la dirección para confirmar la ubicación en el mapa';
       statusEl.style.color = '#f87171';
       return;
     }
@@ -239,13 +212,14 @@ function abrirModalParada(paradaExistente = null) {
       paradas.push(parada);
     }
 
-    cerrarMapaModal();
     overlay.remove();
     renderListaParadas();
   });
 }
 
-async function buscarDireccion() {
+// ─── Búsqueda + mapa fullscreen ───────────────────────────────────────────────
+
+async function buscarYAbrirMapa() {
   const dir = document.getElementById('mp-direccion').value.trim();
   if (!dir) return;
 
@@ -259,82 +233,126 @@ async function buscarDireccion() {
   try {
     const coords = await geocodificar(dir);
     coordsModal = { lat: coords.lat, lng: coords.lng };
-    mostrarMapaModal(coords.lat, coords.lng, dir);
-    statusEl.textContent = '✓ Ubica el pin en el mapa. Puedes arrastrarlo para ajustar.';
-    statusEl.style.color = '#4ade80';
+    statusEl.textContent = '';
+    abrirMapaFullscreen(coords.lat, coords.lng);
   } catch {
-    statusEl.textContent = 'No se encontró esa dirección. Intenta ser más específico (ciudad, colonia).';
+    statusEl.textContent = 'No se encontró. Intenta: "Calle Número, Colonia, Guadalajara"';
     statusEl.style.color = '#f87171';
-    const wrap = document.getElementById('mp-mapa-wrap');
-    if (wrap) wrap.style.display = 'none';
-    if (mapaModal) { mapaModal.remove(); mapaModal = null; }
-    coordsModal = { lat: null, lng: null };
   } finally {
     btn.disabled = false;
   }
 }
 
-function mostrarMapaModal(lat, lng) {
-  const wrap = document.getElementById('mp-mapa-wrap');
-  if (!wrap) return;
+function abrirMapaFullscreen(lat, lng) {
+  // Eliminar instancia anterior si existe
+  const anterior = document.getElementById('mapa-fs-overlay');
+  if (anterior) anterior.remove();
 
-  if (mapaModal) { mapaModal.remove(); mapaModal = null; }
+  const fsOverlay = document.createElement('div');
+  fsOverlay.id = 'mapa-fs-overlay';
+  fsOverlay.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;background:#0f1117';
 
-  wrap.style.display = 'block';
+  fsOverlay.innerHTML = `
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;background:#1a1d26;border-bottom:1px solid #2a2d3a;flex-shrink:0">
+      <button id="btn-fs-volver"
+        style="padding:8px 14px;border-radius:10px;background:#0f1117;color:#9ca3af;border:1px solid #2a2d3a;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        Volver
+      </button>
+      <div style="flex:1">
+        <p style="color:white;font-size:14px;font-weight:600;margin:0;font-family:'Syne',sans-serif">Confirma la ubicación</p>
+        <p style="color:#6b7280;font-size:12px;margin:0">Toca el mapa o arrastra el pin para ajustar</p>
+      </div>
+    </div>
 
-  // setTimeout asegura que el browser terminó el layout del modal antes
-  // de que Leaflet mida el contenedor (más confiable que rAF en modals)
-  setTimeout(() => {
-    const contenedor = document.getElementById('mp-mapa');
-    if (!contenedor) return;
+    <div id="mapa-fs-contenedor" style="flex:1;width:100%;position:relative"></div>
 
-    // Forzar dimensiones explícitas para que Leaflet no calcule 0x0
-    const modalInner = document.getElementById('modal-inner');
-    const ancho = modalInner ? modalInner.offsetWidth - 50 : 460;
-    contenedor.style.width = ancho + 'px';
-    contenedor.style.height = '220px';
+    <div style="padding:16px;background:#1a1d26;border-top:1px solid #2a2d3a;flex-shrink:0">
+      <p id="mapa-fs-coords" style="font-size:12px;color:#6b7280;margin:0 0 12px;font-family:'DM Sans',sans-serif;text-align:center">
+        📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}
+      </p>
+      <button id="btn-fs-confirmar"
+        style="width:100%;padding:16px;border-radius:14px;background:#f97316;color:white;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif"
+        onmouseover="this.style.background='#ea6c0a'"
+        onmouseout="this.style.background='#f97316'">
+        ✓ Confirmar esta ubicación
+      </button>
+    </div>
+  `;
 
-    mapaModal = L.map(contenedor, {
-      zoomControl: true,
-      attributionControl: false,
-      preferCanvas: false
-    }).setView([lat, lng], 16);
+  document.body.appendChild(fsOverlay);
 
-    // URL sin subdominios — más simple y confiable en modals
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(mapaModal);
+  // Leaflet en un div top-level (no dentro de modal) — funciona siempre
+  let coordsActuales = { lat, lng };
+  const mapa = L.map('mapa-fs-contenedor', { zoomControl: true, attributionControl: false })
+    .setView([lat, lng], 17);
 
-    const icono = L.divIcon({
-      className: '',
-      html: `<div style="
-        width:36px;height:36px;border-radius:50% 50% 50% 0;
-        background:#f97316;transform:rotate(-45deg);
-        border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.5);
-      "></div>`,
-      iconSize: [36, 36],
-      iconAnchor: [18, 36]
-    });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
+    .addTo(mapa);
 
-    markerModal = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapaModal);
+  const icono = L.divIcon({
+    className: '',
+    html: `<div style="width:36px;height:36px;border-radius:50% 50% 50% 0;background:#f97316;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 12px rgba(0,0,0,0.4)"></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36]
+  });
 
-    markerModal.on('dragend', e => {
-      const pos = e.target.getLatLng();
-      coordsModal = { lat: pos.lat, lng: pos.lng };
-      actualizarCoordsDisplay(pos.lat, pos.lng);
-    });
+  const marker = L.marker([lat, lng], { icon: icono, draggable: true }).addTo(mapa);
 
-    actualizarCoordsDisplay(lat, lng);
+  function actualizarCoords(nuevoLat, nuevoLng) {
+    coordsActuales = { lat: nuevoLat, lng: nuevoLng };
+    const el = document.getElementById('mapa-fs-coords');
+    if (el) el.textContent = `📍 ${nuevoLat.toFixed(5)}, ${nuevoLng.toFixed(5)}`;
+  }
 
-    // Segundo invalidateSize después de que los tiles arranquen
-    setTimeout(() => mapaModal && mapaModal.invalidateSize(true), 200);
-  }, 300);
+  marker.on('dragend', e => {
+    const p = e.target.getLatLng();
+    actualizarCoords(p.lat, p.lng);
+  });
+
+  // Clic en el mapa mueve el pin
+  mapa.on('click', e => {
+    marker.setLatLng(e.latlng);
+    actualizarCoords(e.latlng.lat, e.latlng.lng);
+  });
+
+  document.getElementById('btn-fs-volver').addEventListener('click', () => {
+    mapa.remove();
+    fsOverlay.remove();
+  });
+
+  document.getElementById('btn-fs-confirmar').addEventListener('click', () => {
+    coordsModal = { lat: coordsActuales.lat, lng: coordsActuales.lng };
+
+    // Actualizar badge en el modal
+    const badge = document.getElementById('mp-ubicacion-badge');
+    const statusEl = document.getElementById('mp-geo-status');
+    if (badge) {
+      badge.querySelector('span').textContent = `Ubicación confirmada (${coordsActuales.lat.toFixed(4)}, ${coordsActuales.lng.toFixed(4)})`;
+    } else if (statusEl) {
+      // Si no existe el badge, crearlo
+      const wrapper = statusEl.parentElement;
+      const div = document.createElement('div');
+      div.id = 'mp-ubicacion-badge';
+      div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#002210;border:1px solid #15803440;margin-top:8px';
+      div.innerHTML = `
+        <svg width="14" height="14" fill="#4ade80" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        <span style="font-size:12px;color:#4ade80;flex:1">Ubicación confirmada (${coordsActuales.lat.toFixed(4)}, ${coordsActuales.lng.toFixed(4)})</span>
+        <button id="btn-cambiar-ubicacion" style="font-size:11px;color:#9ca3af;background:none;border:none;cursor:pointer;text-decoration:underline">Cambiar</button>
+      `;
+      wrapper.appendChild(div);
+      div.querySelector('#btn-cambiar-ubicacion').addEventListener('click', () => {
+        abrirMapaFullscreen(coordsModal.lat, coordsModal.lng);
+      });
+      if (statusEl) statusEl.textContent = '';
+    }
+
+    mapa.remove();
+    fsOverlay.remove();
+  });
 }
 
-function actualizarCoordsDisplay(lat, lng) {
-  const el = document.getElementById('mp-coords-display');
-  if (el) el.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Arrastra el pin para ajustar`;
-}
+// ─── Lista de paradas ─────────────────────────────────────────────────────────
 
 function renderListaParadas() {
   const lista = document.getElementById('lista-paradas');
@@ -383,10 +401,11 @@ function renderListaParadas() {
   });
 }
 
+// ─── Geocodificación ──────────────────────────────────────────────────────────
+
 async function geocodificar(direccion) {
-  // Siempre busca dentro de Jalisco para evitar resultados fuera del estado
   const yaIncluye = /jalisco|guadalajara|zapopan|tlaquepaque|tonalá|tonala|tlajomulco/i.test(direccion);
-  const query = yaIncluye ? direccion : `${direccion}, Jalisco, México`;
+  const query = yaIncluye ? direccion : `${direccion}, Guadalajara, Jalisco, México`;
 
   const res = await fetch(
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=mx`,
@@ -396,6 +415,8 @@ async function geocodificar(direccion) {
   if (!data.length) throw new Error('Sin resultados');
   return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
 }
+
+// ─── Optimización de ruta ─────────────────────────────────────────────────────
 
 async function optimizarRuta(ps) {
   if (ps.length <= 1) return ps.map((p, i) => ({ ...p, orden: i }));
@@ -414,6 +435,8 @@ async function optimizarRuta(ps) {
     return ps.map((p, i) => ({ ...p, orden: i }));
   }
 }
+
+// ─── Guardar salida ───────────────────────────────────────────────────────────
 
 async function guardarSalida() {
   const nombre = document.getElementById('nombre-salida').value.trim();
